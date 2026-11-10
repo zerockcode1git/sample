@@ -26,6 +26,16 @@
 | created_at | TIMESTAMP | NOT NULL | 작성일 (자동) |
 | updated_at | TIMESTAMP | NOT NULL | 수정일 (자동) |
 
+인덱스
+
+| 이름 | 대상 | 방식 | 용도 |
+| --- | --- | --- | --- |
+| idx_product_price | price | B-tree (`@Index`) | 가격대 검색 |
+| idx_product_pname_trgm | lower(pname) | GIN `gin_trgm_ops` | 상품명 부분 검색 |
+| idx_product_pdesc_trgm | lower(pdesc) | GIN `gin_trgm_ops` | 설명 부분 검색 |
+
+trigram 인덱스는 JPA로 선언할 수 없어 `src/main/resources/db/product-index.sql`(pg_trgm 확장 + 인덱스)을 Hibernate 테이블 생성 후 실행합니다 (`spring.sql.init`, `defer-datasource-initialization`). 운영에서는 마이그레이션 스크립트로 옮겨야 합니다.
+
 작성일, 수정일은 `common.entity.BaseEntity`와 JPA Auditing(`common.config.JpaAuditingConfig`)이 자동으로 채웁니다.
 
 ## 엔티티 작성 규칙
