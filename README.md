@@ -12,8 +12,8 @@ Spring Boot 기반 백엔드 서비스입니다.
 ## 빠른 시작
 
 ```bash
-# 1. Supabase DB 비밀번호 설정
-export DB_PASSWORD='비밀번호'
+# 1. 로컬 프로필 파일 생성 후 password에 Supabase DB 비밀번호 입력
+cp src/main/resources/application-local.yaml.example src/main/resources/application-local.yaml
 
 # 2. 애플리케이션 실행 (기본 프로필: local)
 ./gradlew bootRun

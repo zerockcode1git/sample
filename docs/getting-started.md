@@ -23,15 +23,20 @@ cp src/main/resources/application-local.yaml.example src/main/resources/applicat
 | Port | `5432` |
 | Database | `postgres` |
 | User | `postgres.pltejotxjzhsdqleqzmj` |
-| Password | 환경 변수 `DB_PASSWORD` |
+| Password | `application-local.yaml`에 직접 입력 또는 환경 변수 `DB_PASSWORD` |
 
-비밀번호는 파일에 적지 않고 실행 전에 환경 변수로 넣습니다.
+비밀번호는 둘 중 한 가지 방법으로 넣습니다.
 
-```bash
-export DB_PASSWORD='비밀번호'
-```
+1. `application-local.yaml`의 `password` 값에 직접 입력합니다. 이 파일은 Git에 올라가지 않습니다.
+2. 예시 파일 값(`${DB_PASSWORD}`)을 그대로 두고 실행 전에 환경 변수를 설정합니다.
 
-IntelliJ나 VS Code에서 실행할 때는 실행 구성의 환경 변수에 `DB_PASSWORD`를 추가합니다.
+   ```bash
+   export DB_PASSWORD='비밀번호'
+   ```
+
+   IntelliJ나 VS Code에서 실행할 때는 실행 구성의 환경 변수에 `DB_PASSWORD`를 추가합니다.
+
+> `.example` 파일에는 비밀번호를 적지 않습니다.
 
 ## 빌드와 실행
 
