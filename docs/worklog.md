@@ -49,3 +49,28 @@
   - 검색 시 판매여부 필터 추가 여부 결정
   - `ProductRepositoryTest`와 `ProductCrudTest`의 CRUD 테스트 중복 정리
   - Service, Controller, API 문서(`api.md`)
+
+## 2026-11-10 (ProductService)
+
+- `ProductService`: register, get, list, modify, changeStock, remove. 클래스 기본 `readOnly`, 변경 메서드만 `@Transactional`
+- DTO: `ProductCreateRequest`, `ProductUpdateRequest`(version 포함), `ProductResponse`, 공통 `PageResponse`
+- 예외: `BusinessException` + `ErrorCode`, 상품 예외 4종 + `InvalidInputException`, `GlobalExceptionHandler`
+- 동시성: 재고 증감은 비관적 잠금(FOR NO KEY UPDATE, lock_timeout 3초), 수정은 `@Version` 낙관적 잠금, 목록은 REPEATABLE_READ
+- `tbl_product.version` 컬럼 추가 (기존 20건 0으로 채워짐)
+- `ProductServiceTest` 12건 통과 (동시 차감 8건 → 5건 성공, 3건 재고 부족). 전체 테스트 통과
+- `architecture.md`(패키지명 `common`으로 정정, 예외/동시성 표), `database.md` 갱신
+
+- 실제 DB 변경: 33번(기계식 키보드) 재고 6 → 4 (`changeStock`, amount=-2), version 0 → 1
+
+- `ProductStockChangeRequest` 삭제, `changeStock(Long pno, int amount)`로 변경 (요청: 단일 값은 DTO로 만들지 않음)
+
+### 현재 상태 요약
+
+- 상품: Entity, Repository(CRUD + Querydsl 검색/페이징), Service(트랜잭션, DTO, 커스텀 예외, 동시성) 완료. 기능 정리는 `docs/product.md`
+- 테스트: 전체 통과 (Repository 7, CRUD 4, 이름 검색 1, Service 12)
+- 실제 DB: 상품 20건 (33번 재고 4, version 1)
+- 남은 작업
+  - Controller, API 문서(`api.md`)
+  - `spring.sql.init` 설정이 Git 제외 파일(`application-local.yaml`)에만 있음
+  - `application-local.yaml.example`이 작업 트리에서 삭제된 상태 (커밋 미포함)
+  - 검색 시 판매여부 필터 여부, `@DynamicUpdate` 적용 여부

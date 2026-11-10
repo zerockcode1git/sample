@@ -23,6 +23,7 @@
 | on_sale | BOOLEAN | NOT NULL | 판매 여부 (수정 가능) |
 | stock | INT | NOT NULL | 재고 수량 (수정 가능) |
 | img1, img2, img3 | VARCHAR(500) | | 상품 이미지 |
+| version | BIGINT | NOT NULL, DEFAULT 0 | 낙관적 잠금 버전 (`@Version`) |
 | created_at | TIMESTAMP | NOT NULL | 작성일 (자동) |
 | updated_at | TIMESTAMP | NOT NULL | 수정일 (자동) |
 
