@@ -12,15 +12,21 @@
 
 ## 테이블 목록
 
-아직 정의된 엔티티가 없습니다. 엔티티를 추가할 때 아래 형식으로 기록합니다.
-
-### `{table_name}`
+### `tbl_product` (`product.entity.ProductEntity`)
 
 | 컬럼 | 타입 | 제약 | 설명 |
 | --- | --- | --- | --- |
-| id | BIGINT | PK | 식별자 |
-| created_at | TIMESTAMP | NOT NULL | 생성 시각 |
-| updated_at | TIMESTAMP | NOT NULL | 수정 시각 |
+| pno | BIGINT | PK, IDENTITY | 상품 번호 |
+| pname | VARCHAR(200) | NOT NULL | 상품명 (수정 가능) |
+| pdesc | VARCHAR(2000) | | 상품 설명 |
+| price | INT | NOT NULL | 상품 가격 |
+| on_sale | BOOLEAN | NOT NULL | 판매 여부 (수정 가능) |
+| stock | INT | NOT NULL | 재고 수량 (수정 가능) |
+| img1, img2, img3 | VARCHAR(500) | | 상품 이미지 |
+| created_at | TIMESTAMP | NOT NULL | 작성일 (자동) |
+| updated_at | TIMESTAMP | NOT NULL | 수정일 (자동) |
+
+작성일, 수정일은 `common.entity.BaseEntity`와 JPA Auditing(`common.config.JpaAuditingConfig`)이 자동으로 채웁니다.
 
 ## 엔티티 작성 규칙
 

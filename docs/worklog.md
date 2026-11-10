@@ -19,3 +19,9 @@
 - DB: Supabase PostgreSQL 17, SSL 필수, 커넥션 풀 최대 2개
 - 문서: 루트 `README.md`, `docs/` 아래 7개 문서
 - 남은 작업: 도메인 코드, 엔티티, API 구현 시 `database.md`, `api.md` 갱신
+
+## 2026-11-10 (상품 엔티티)
+
+- `common.entity.BaseEntity` 추가 (작성일, 수정일 자동 기록), `common.config.JpaAuditingConfig`로 JPA Auditing 활성화
+- `product.entity.ProductEntity` 추가 (`tbl_product`). 수정 메서드는 상품명, 판매여부, 재고수량만 제공
+- `docs/database.md`에 테이블 정의 반영
