@@ -44,7 +44,7 @@ class ProductServiceTest {
 
     private ProductResponse register(int stock) {
         ProductResponse p = productService.register(
-                new ProductCreateRequest("서비스테스트상품", "설명", 10_000, true, stock, null, null, null));
+                new ProductCreateRequest("서비스테스트상품", "설명", 10_000, true, stock), List.of());
         created.add(p.pno());
         return p;
     }

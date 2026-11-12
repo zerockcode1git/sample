@@ -2,11 +2,14 @@ package com.example.sample.product.service;
 
 import com.example.sample.common.dto.PageResponse;
 import com.example.sample.common.exception.InvalidInputException;
+import com.example.sample.common.storage.FileStorageService;
+import com.example.sample.common.storage.ImageFileValidator;
 import com.example.sample.product.dto.ProductCreateRequest;
 import com.example.sample.product.dto.ProductResponse;
 import com.example.sample.product.dto.ProductSearchCondition;
 import com.example.sample.product.dto.ProductUpdateRequest;
 import com.example.sample.product.entity.ProductEntity;
+import com.example.sample.product.exception.InvalidStockException;
 import com.example.sample.product.exception.ProductConflictException;
 import com.example.sample.product.exception.ProductNotFoundException;
 import com.example.sample.product.repository.ProductRepository;
@@ -17,7 +20,13 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Isolation;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 import org.springframework.util.StringUtils;
+import org.springframework.web.multipart.MultipartFile;
+
+import java.util.ArrayList;
+import java.util.List;
 
 /**
  * 상품 관련 비즈니스 로직.
@@ -36,17 +45,41 @@ import org.springframework.util.StringUtils;
 @Transactional(readOnly = true)
 public class ProductService {
 
-    private final ProductRepository productRepository;
+    private static final int MAX_IMAGES = 3;
+    private static final String IMAGE_DIRECTORY = "products";
 
+    private final ProductRepository productRepository;
+    private final FileStorageService fileStorageService;
+    private final ImageFileValidator imageFileValidator;
+
+    /**
+     * 상품 등록 + 이미지 업로드.
+     * <ol>
+     *   <li>상품 정보와 모든 이미지를 먼저 검증 (하나라도 잘못되면 아무것도 올리지 않음)</li>
+     *   <li>이미지를 저장소에 올리고 저장 경로를 img1~img3에 넣어 DB에 저장</li>
+     *   <li>트랜잭션이 커밋되지 않으면(DB 저장 실패, 업로드 도중 실패 등) 이미 올린 이미지를 삭제</li>
+     * </ol>
+     *
+     * @param images 0~3개. null 가능
+     */
     @Transactional
-    public ProductResponse register(ProductCreateRequest request) {
+    public ProductResponse register(ProductCreateRequest request, List<MultipartFile> images) {
         validateCreate(request);
-        ProductEntity saved = productRepository.save(request.toEntity());
-        return ProductResponse.from(saved);
+        List<MultipartFile> files = selectedFiles(images);
+        imageFileValidator.validate(files, MAX_IMAGES);
+
+        List<String> uploaded = new ArrayList<>();
+        deleteOnRollback(uploaded);
+        for (MultipartFile file : files) {
+            uploaded.add(fileStorageService.upload(file, IMAGE_DIRECTORY));
+        }
+
+        ProductEntity saved = productRepository.save(request.toEntity(uploaded));
+        return toResponse(saved);
     }
 
     public ProductResponse get(Long pno) {
-        return ProductResponse.from(findOrThrow(pno));
+        return toResponse(findOrThrow(pno));
     }
 
     @Transactional(readOnly = true, isolation = Isolation.REPEATABLE_READ)
@@ -55,7 +88,7 @@ public class ProductService {
         if (cond.minPrice() != null && cond.maxPrice() != null && cond.minPrice() > cond.maxPrice()) {
             throw new InvalidInputException("최소 가격이 최대 가격보다 클 수 없습니다.");
         }
-        return PageResponse.of(productRepository.search(cond, pageable), ProductResponse::from);
+        return PageResponse.of(productRepository.search(cond, pageable), this::toResponse);
     }
 
     @Transactional
@@ -78,7 +111,7 @@ public class ProductService {
         } catch (OptimisticLockingFailureException e) {
             throw new ProductConflictException(pno, e);
         }
-        return ProductResponse.from(product);
+        return toResponse(product);
     }
 
     /**
@@ -99,7 +132,7 @@ public class ProductService {
         }
         product.adjustStock(amount);
         productRepository.flush();
-        return ProductResponse.from(product);
+        return toResponse(product);
     }
 
     @Transactional
@@ -113,6 +146,32 @@ public class ProductService {
         }
     }
 
+    private ProductResponse toResponse(ProductEntity product) {
+        return ProductResponse.from(product, fileStorageService::getUrl);
+    }
+
+    // 브라우저 폼에서 파일을 고르지 않으면 이름 없는 빈 파트가 오므로 제외합니다.
+    private static List<MultipartFile> selectedFiles(List<MultipartFile> images) {
+        if (images == null) {
+            return List.of();
+        }
+        return images.stream()
+                .filter(f -> !(f.isEmpty() && !StringUtils.hasText(f.getOriginalFilename())))
+                .toList();
+    }
+
+    // 커밋되지 않고 끝나면 업로드한 파일을 지워 저장소에 고아 파일이 남지 않게 합니다.
+    private void deleteOnRollback(List<String> uploadedPaths) {
+        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+            @Override
+            public void afterCompletion(int status) {
+                if (status != STATUS_COMMITTED) {
+                    uploadedPaths.forEach(fileStorageService::delete);
+                }
+            }
+        });
+    }
+
     private ProductEntity findOrThrow(Long pno) {
         return productRepository.findById(pno).orElseThrow(() -> new ProductNotFoundException(pno));
     }
@@ -123,6 +182,10 @@ public class ProductService {
         }
         if (request.price() < 0) {
             throw new InvalidInputException("상품 가격은 0 이상이어야 합니다.");
+        }
+        // 엔티티 생성 시에도 검사하지만, 이미지를 올리기 전에 미리 거부합니다.
+        if (request.stock() < 0) {
+            throw new InvalidStockException(request.stock());
         }
     }
 }

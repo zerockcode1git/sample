@@ -7,6 +7,7 @@ import java.util.function.Function;
 
 /**
  * 목록 응답용 페이지 DTO. Spring Data {@link Page}를 그대로 노출하지 않기 위해 사용합니다.
+ * page는 1부터 시작합니다 (Spring Data의 0 기반 번호 + 1).
  */
 public record PageResponse<T>(List<T> content, int page, int size, long totalElements, int totalPages,
                               boolean hasNext) {
@@ -14,6 +15,6 @@ public record PageResponse<T>(List<T> content, int page, int size, long totalEle
     public static <E, T> PageResponse<T> of(Page<E> page, Function<E, T> mapper) {
         return new PageResponse<>(
                 page.getContent().stream().map(mapper).toList(),
-                page.getNumber(), page.getSize(), page.getTotalElements(), page.getTotalPages(), page.hasNext());
+                page.getNumber() + 1, page.getSize(), page.getTotalElements(), page.getTotalPages(), page.hasNext());
     }
 }

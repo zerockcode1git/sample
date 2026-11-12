@@ -74,3 +74,72 @@
   - `spring.sql.init` 설정이 Git 제외 파일(`application-local.yaml`)에만 있음
   - `application-local.yaml.example`이 작업 트리에서 삭제된 상태 (커밋 미포함)
   - 검색 시 판매여부 필터 여부, `@DynamicUpdate` 적용 여부
+
+## 2026-11-12 (ProductController)
+
+- `ProductController` (`/api/products`): 등록(POST 201), 조회(GET), 목록(GET), 수정(PUT), 삭제(DELETE 204)
+  - 목록: `page`는 1부터(기본 1), `size` 1~100(기본 10), `keyword`로 상품명/설명 검색. 범위 밖이면 400
+- `PageResponse.page`를 1 기반으로 변경 (`getNumber() + 1`)
+- `ProductControllerAdvice`: ProductController 전용, `HIGHEST_PRECEDENCE`. 비즈니스 예외, 타입 불일치, JSON 오류, DB 제약 위반(400), 그 외(500)를 메시지 응답으로 변환
+- `ProductControllerTest` 4건 (MockMvc + 실제 DB, 롤백). 전체 테스트 통과
+- `api.md`, `product.md` 갱신
+
+### 현재 상태 요약
+
+- 상품: Entity, Repository, Service, Controller + Advice 완료
+- 남은 작업
+  - 재고 증감(`changeStock`) API 노출 여부, 목록 가격/정렬 파라미터 노출 여부
+  - `spring.sql.init` 설정이 Git 제외 파일에만 있음, `application-local.yaml.example` 삭제 상태 (커밋 미포함)
+
+## 2026-11-12 (Supabase Storage 설정)
+
+- `application-local.yaml`에 `supabase.storage` 추가 (url, bucket `images`(Private), service-key `${SUPABASE_SERVICE_KEY:}`, signed-url-expires-in 3600)
+- `common.storage.SupabaseStorageProperties`(@ConfigurationProperties), `SupabaseStorageConfig`(인증 헤더가 들어간 `RestClient` 빈)
+- `SupabaseStorageConfigTest`: 설정 바인딩 1건 통과, 버킷 접속 확인 1건은 `SUPABASE_SERVICE_KEY` 없어 건너뜀
+- `configuration.md` 갱신
+- 남은 작업: 업로드/삭제/서명 URL 서비스, 상품 이미지 연동, 키 설정 후 접속 확인
+
+## 2026-11-12 (Storage 업로드 확인)
+
+- `SupabaseStorageUploadTest` 3건 통과 (실제 업로드 후 삭제)
+  - 2.32MB PNG 업로드 200 → 서명 URL로 다운로드, 크기 일치
+  - 3.15MB PNG 업로드 거부 (`EntityTooLarge`, 413)
+  - 버킷 정보: `public=true`(요청은 Private였음), `file_size_limit=3145728`(3MB), `allowed_mime_types=[image/*]`
+- 문제 해결: `{path}` URI 변수에 `/`가 들어가면 `%2F`로 인코딩되어 서명 URL이 `InvalidSignature` → 경로를 문자열로 연결
+- 확인용 샘플 `images/test/sample-under-3mb.png`(2.13MB) 업로드, 삭제하지 않고 유지
+- 남은 작업: 버킷 Public/Private 결정, 업로드 서비스 구현 시 경로 인코딩 주의
+
+## 2026-11-12 (상품 등록 이미지 업로드)
+
+- 버킷은 Public 유지로 결정 (상품 이미지는 공개 자료, 고정 URL·CDN 캐시). DB에는 경로만 저장하고 응답 시 Public URL로 변환
+- `common.storage`: `FileStorageService`(인터페이스), `SupabaseFileStorageService`(upload/delete/getUrl), `ImageFileValidator`(image/*, jpg/jpeg/png/gif/webp, 3MB 미만, 최대 3개), `InvalidFileException`(400), `StorageException`(502)
+- `ErrorCode`: `INVALID_FILE`, `STORAGE_ERROR` 추가. `GlobalExceptionHandler`에 multipart 크기 초과 처리
+- `application.yaml`: multipart `max-file-size: 3MB`, `max-request-size: 10MB`
+- 등록 API를 `multipart/form-data`로 변경 (`product` JSON 파트 + `images` 파트 0~3개). `ProductCreateRequest`에서 img1~3 제거
+- `ProductService.register(request, images)`: 전부 검증 → 업로드 → DB 저장. 커밋 안 되면 업로드 파일 삭제 (`TransactionSynchronization.afterCompletion`)
+- `ProductResponse.from(entity, urlResolver)`로 변경, 조회/목록/수정 응답도 이미지 URL로 나감
+- `ProductControllerAdvice`: `product` 파트 누락, 파트 형식 오류 처리 추가
+- 테스트: `ProductRegisterUploadTest` 4건 추가(실제 Storage, 롤백 시 삭제 확인), `ProductControllerTest` multipart로 수정. 전체 통과
+- `api.md`, `product.md`, `configuration.md` 갱신
+
+### 현재 상태 요약
+
+- 상품 등록: multipart + Supabase Storage 이미지 업로드 완료
+- 남은 작업
+  - 상품 삭제 시 Storage 이미지 삭제 (현재 범위 밖)
+  - 업로드 파일 내용 검사 (현재 Content-Type과 확장자만 확인)
+  - 시드 데이터 img 값은 Storage에 실제 파일 없음
+
+## 2026-11-12 (Swagger UI)
+
+- `springdoc-openapi-starter-webmvc-ui:3.2.0` 추가 (Spring Boot 4.1.2 기준 빌드, swagger-ui 5.34.0)
+- `OpenApiConfig`: API 정보 + `GroupedOpenApi`("상품 등록")로 `ProductController.register`만 노출
+- 등록 API에 `@Operation`, 응답 예시(201/400/502), `product` 파트 `encoding: application/json` 지정 → Swagger UI의 Try it out에서 JSON 파트로 전송됨 (swagger-ui 번들 코드에서 확인)
+- `ProductCreateRequest`, `ProductResponse`, `ErrorResponse`에 `@Schema` 설명/예시
+- 확인: `bootRun` 후 `/swagger-ui.html` 302 → `/swagger-ui/index.html`, 문서 경로는 `POST /api/products` 하나. curl로 같은 형식 등록 201 → 이미지 URL 200 (확인용 상품 246과 이미지는 삭제). 전체 테스트 통과
+
+## 2026-11-12 (저장 파일명에 원본 이름 추가)
+
+- 저장 파일명: `{uuid}_{원본이름}.{소문자 확장자}` (예: `front.PNG` → `{uuid}_front.png`)
+- Supabase 객체 키는 한글을 거부(`InvalidKey`, 직접 확인)하므로 원본 이름은 영문/숫자/`.`/`_`/`-`만 남기고 나머지는 `_`로 바꿈. 남는 게 없으면 `image`, 최대 100자, 경로(`C:\...`, `dir/`)는 제거
+- `StoredFileNameTest` 9건 추가, `ProductRegisterUploadTest` 경로 검증 수정. 전체 테스트 통과
