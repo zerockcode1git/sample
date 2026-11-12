@@ -3,6 +3,7 @@ package com.example.sample.product.service;
 import com.example.sample.common.dto.PageResponse;
 import com.example.sample.common.exception.InvalidInputException;
 import com.example.sample.product.dto.ProductCreateRequest;
+import com.example.sample.product.dto.ProductListResponse;
 import com.example.sample.product.dto.ProductResponse;
 import com.example.sample.product.dto.ProductSearchCondition;
 import com.example.sample.product.dto.ProductUpdateRequest;
@@ -158,7 +159,7 @@ class ProductServiceTest {
 
     @Test
     void list() {
-        PageResponse<ProductResponse> page = productService.list(
+        PageResponse<ProductListResponse> page = productService.list(
                 new ProductSearchCondition("무선", null, null), PageRequest.of(0, 10));
         assertThat(page.content()).isNotEmpty().allMatch(p ->
                 p.pname().contains("무선") || p.pdesc().contains("무선"));

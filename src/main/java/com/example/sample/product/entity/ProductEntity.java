@@ -1,6 +1,7 @@
 package com.example.sample.product.entity;
 
 import com.example.sample.common.entity.BaseEntity;
+import com.example.sample.product.dto.ProductImage;
 import com.example.sample.product.exception.InsufficientStockException;
 import com.example.sample.product.exception.InvalidStockException;
 import jakarta.persistence.Column;
@@ -15,6 +16,9 @@ import lombok.AccessLevel;
 import lombok.Builder;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
+
+import java.util.ArrayList;
+import java.util.List;
 
 @Getter
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
@@ -86,7 +90,7 @@ public class ProductEntity extends BaseEntity {
         this.upload3 = upload3;
     }
 
-    // 수정 가능 항목: 상품명, 판매여부, 재고수량
+    // 수정 가능 항목: 상품명, 판매여부, 재고수량, 이미지
     public void changePname(String pname) {
         this.pname = pname;
     }
@@ -98,6 +102,33 @@ public class ProductEntity extends BaseEntity {
     public void changeStock(int stock) {
         validateStock(stock);
         this.stock = stock;
+    }
+
+    /**
+     * 이미지 교체. 순서대로 1~3번에 넣고 남는 칸은 비웁니다.
+     *
+     * @param images (원본 이름, 파일 ID) 0~3개
+     */
+    public void changeImages(List<ProductImage> images) {
+        ProductImage[] slot = new ProductImage[3];
+        for (int i = 0; i < Math.min(images.size(), 3); i++) {
+            slot[i] = images.get(i);
+        }
+        this.img1 = slot[0] == null ? null : slot[0].originalName();
+        this.upload1 = slot[0] == null ? null : slot[0].fileId();
+        this.img2 = slot[1] == null ? null : slot[1].originalName();
+        this.upload2 = slot[1] == null ? null : slot[1].fileId();
+        this.img3 = slot[2] == null ? null : slot[2].originalName();
+        this.upload3 = slot[2] == null ? null : slot[2].fileId();
+    }
+
+    /** 현재 이미지 (원본 이름, 파일 ID). 업로드 파일이 있는 칸만, 순서대로 */
+    public List<ProductImage> getImages() {
+        List<ProductImage> images = new ArrayList<>();
+        if (upload1 != null) images.add(new ProductImage(img1, upload1));
+        if (upload2 != null) images.add(new ProductImage(img2, upload2));
+        if (upload3 != null) images.add(new ProductImage(img3, upload3));
+        return images;
     }
 
     /** 재고 증감. 결과가 음수면 예외를 던지고 값은 바뀌지 않습니다. */

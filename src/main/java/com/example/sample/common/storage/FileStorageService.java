@@ -17,6 +17,9 @@ public interface FileStorageService {
      */
     String upload(MultipartFile file, String directory);
 
+    /** 만들어 둔 데이터(예: 썸네일)를 {@code {directory}/{fileId}}로 업로드합니다. */
+    void upload(byte[] data, String contentType, String directory, String fileId);
+
     /** 파일을 삭제합니다. 없는 파일이어도 예외를 던지지 않습니다. */
     void delete(String directory, String fileId);
 

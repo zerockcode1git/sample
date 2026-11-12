@@ -49,5 +49,6 @@ cp src/main/resources/application-local.yaml.example src/main/resources/applicat
 - [데이터베이스](docs/database.md)
 - [상품 기능](docs/product.md)
 - [API 명세](docs/api.md)
+- [curl로 CRUD 테스트](docs/curl-test.md)
 - [개발 컨벤션](docs/conventions.md)
 - [작업 기록](docs/worklog.md)

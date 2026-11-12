@@ -25,9 +25,9 @@ product/
 | `register` | 상품 등록 + 이미지 업로드 | `ProductCreateRequest`, `List<MultipartFile>`(0~3개) → `ProductResponse` | `InvalidInputException`(빈 상품명, 음수 가격), `InvalidStockException`, `InvalidFileException`, `StorageException` |
 | `get` | 단건 조회 | `Long pno` → `ProductResponse` | `ProductNotFoundException` |
 | `list` | 검색 + 페이징 | `ProductSearchCondition`, `Pageable` → `PageResponse<ProductResponse>` | `InvalidInputException`(최소 가격 > 최대 가격) |
-| `modify` | 상품명, 판매여부, 재고 수정 | `Long pno`, `ProductUpdateRequest` → `ProductResponse` | `ProductNotFoundException`, `ProductConflictException`, `InvalidStockException`, `InvalidInputException` |
+| `modify` | 상품명, 판매여부, 재고, 이미지 수정 | `Long pno`, `ProductUpdateRequest`, `List<MultipartFile>` → `ProductResponse` | `ProductNotFoundException`, `ProductConflictException`, `InvalidStockException`, `InvalidInputException` |
 | `changeStock` | 재고 증감 (양수 입고, 음수 차감) | `Long pno`, `int amount` → `ProductResponse` | `ProductNotFoundException`, `InsufficientStockException`, `ProductConflictException`(잠금 대기 3초 초과), `InvalidInputException`(amount=0) |
-| `remove` | 삭제 | `Long pno` → 없음 | `ProductNotFoundException`, `ProductConflictException` |
+| `remove` | 삭제 + 이미지 삭제 | `Long pno` → 없음 | `ProductNotFoundException`, `ProductConflictException` |
 
 ## 등록 + 이미지 (`register`)
 
@@ -40,6 +40,22 @@ product/
 - `img1~3`: 원본 파일 이름 그대로 (한글 가능). `upload1~3`: UUID만 저장하고, 응답할 때 `FileStorageService.getUrl("products", uuid)`로 Public URL로 바꿉니다. 이미 `http(s)`로 시작하는 값은 그대로 둡니다.
 - 시드 데이터는 `img1`에 `product1_1.jpg` 같은 이름만 있고 `upload1~3`은 비어 있습니다.
 
+## 수정 + 이미지 교체 (`modify`)
+
+1. 검증: 상품명, 재고, 버전, `keepImages`(이 상품의 이미지인지, 중복 여부), 유지+새 이미지 3개 이하, 새 이미지 파일 → 실패하면 아무것도 올리지 않음
+2. 새 이미지 업로드 (롤백되면 삭제)
+3. DB 수정: 최종 이미지 = 유지 이미지(요청 순서) + 새 이미지 → `changeImages`
+4. 커밋 후: 유지하지 않은 기존 이미지 삭제 / 롤백 시: 새 이미지만 삭제, 기존 이미지는 그대로
+
+- `keepImages` 생략(null) = 모두 유지, `[]` = 모두 삭제. 값은 파일 ID 또는 URL(마지막 경로만 사용)
+
+## 삭제 (`remove`)
+
+1. 상품 조회 후 upload1~3(파일 ID)를 모아 둠
+2. DB 삭제 + `flush` (버전 충돌 시 `ProductConflictException`)
+3. 트랜잭션 **커밋 후**(`TransactionSynchronization.afterCommit`) Storage에서 이미지 삭제. 롤백되면 이미지는 남음
+4. 이미지 삭제 실패는 로그만 남기고 상품 삭제는 유지 (Storage에 파일이 남을 수 있음)
+
 ## 검색 (`list`)
 
 - 조건(모두 선택): `keyword`(상품명 또는 설명에 포함, 대소문자 무시), `minPrice`(이상), `maxPrice`(이하)
@@ -47,6 +63,27 @@ product/
 - count 쿼리는 필요할 때만 실행 (`PageableExecutionUtils`)
 - `REPEATABLE_READ`로 목록과 전체 건수를 같은 스냅샷에서 읽음
 - 인덱스: `lower(pname)`, `lower(pdesc)` pg_trgm GIN, `price` B-tree
+- 컨트롤러: page 0/음수 → 1, size 최대 20 (초과 → 20, 1 미만 → 10)
+- 응답: `ProductListResponse` (첫 이미지 `thumbnail`, `imageCount`). 원본 URL은 넣지 않음
+
+### 검색 인덱스 사용 확인 (2026-11-12, 같은 인덱스의 임시 테이블 20만 건)
+
+| 검색어 | 실행 계획 |
+| --- | --- |
+| 3글자 이상 (`마우스`) | `BitmapOr` → pname/pdesc trigram GIN 인덱스 둘 다 사용 |
+| 2글자 (`무선`) | **Seq Scan** (trigram은 3글자 단위라 2글자 패턴에 인덱스를 못 씀) |
+| 흔한 단어 + LIMIT (`가방`, 2.5만 건) | pkey 역순 스캔 후 10건에서 멈춤 (빠름) |
+
+- 데이터가 적으면(현재 21건) 3글자 이상이어도 Seq Scan이 선택됨 (정상)
+- 2글자 검색 대안: PGroonga 확장 (Supabase에서 설치 가능, 미적용). pg_bigm은 제공 안 됨
+
+## 썸네일
+
+- Supabase 이미지 변환(render)은 프로젝트에서 비활성(`FeatureNotEnabled`, 유료 플랜) → 서버에서 생성
+- `common.storage.ThumbnailGenerator`: 비율 유지, 최대 300px(확대 안 함), 흰 배경, JPEG 품질 0.85. TwelveMonkeys로 webp 읽기 지원
+- 저장: `products/thumbs/{uuid}.jpg` (원본 파일 ID에서 계산, DB 컬럼 없음). 원본 `products/{uuid}.{ext}`는 그대로
+- 등록/수정: 모든 파일을 먼저 디코딩해 썸네일 생성 (이미지가 아니면 업로드 전에 400) → 원본 + 썸네일 업로드
+- 수정/삭제/롤백: 원본과 썸네일을 함께 삭제
 
 ## 동시성
 
@@ -87,6 +124,10 @@ product/
 | `ProductNameSearchTest` | 상품명 검색 (1건) | 롤백 |
 | `ProductServiceTest` | 서비스 기능, 예외, 동시 차감 8건 → 5건 성공/3건 재고 부족 (12건) | 직접 삭제 (잠금 검증 위해 롤백 안 씀) |
 | `ProductControllerTest` | MockMvc로 CRUD, 1 기반 페이징, 설명 검색, 에러 응답 (4건) | 롤백 |
+| `ProductReadTest` | 단건 조회(이미지 이름/URL), 404·잘못된 pno, 목록 페이징·검색·빈 결과·썸네일, page/size 조정, 숫자 아님 오류 (6건) | 롤백 |
+| `ThumbnailGeneratorTest` | 비율 유지 축소, 확대 안 함, JPEG 출력, 이미지 아닌 내용 거부 (6건) | - |
+| `ProductModifyTest` | 일부 유지+새 이미지, 생략 시 전부 유지/순서 변경, 전부 삭제, 업로드 전 거부(다른 이미지, 4개, 버전), 롤백 시 새 이미지만 삭제 (5건). 실제 Storage 사용 | 직접 삭제 |
+| `ProductDeleteTest` | 이미지 포함 삭제(DB+파일), 이미지 없이 삭제, DB 롤백 시 이미지 유지, 404 (4건). 실제 Storage 사용 | 직접 삭제 |
 | `ProductRegisterUploadTest` | 이미지 포함 등록, 이미지 없이 등록, 잘못된 파일 거부, DB 저장 실패 시 이미지 삭제 (4건). 실제 Storage 사용 | 직접 삭제 (DB + Storage) |
 | `ProductDummyDataTest` | 상품 20건 저장 | 유지. `SEED_PRODUCTS=true`일 때만 실행 |
 

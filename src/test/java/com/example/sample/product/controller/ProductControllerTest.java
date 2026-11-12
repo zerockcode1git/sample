@@ -4,6 +4,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
+import org.springframework.http.HttpMethod;
 import org.springframework.http.MediaType;
 import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.test.web.servlet.MockMvc;
@@ -18,7 +19,6 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -54,10 +54,9 @@ class ProductControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.stock").value(5));
 
-        mvc.perform(put("/api/products/{pno}", pno).contentType(MediaType.APPLICATION_JSON)
-                        .content("""
+        mvc.perform(multipart(HttpMethod.PUT, "/api/products/{pno}", pno).file(productPart("""
                                 {"pname":"수정됨","onSale":false,"stock":3,"version":0}
-                                """))
+                                """)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.pname").value("수정됨"))
                 .andExpect(jsonPath("$.version").value(1));
@@ -96,7 +95,7 @@ class ProductControllerTest {
 
     @Test
     void errors() throws Exception {
-        mvc.perform(get("/api/products").param("page", "0"))
+        mvc.perform(get("/api/products").param("page", "abc"))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.code").value("INVALID_INPUT"));
         mvc.perform(get("/api/products/abc"))
@@ -117,10 +116,9 @@ class ProductControllerTest {
                 .andExpect(jsonPath("$.message").value("'product' 파트가 필요합니다."));
 
         long pno = register("버전충돌");
-        mvc.perform(put("/api/products/{pno}", pno).contentType(MediaType.APPLICATION_JSON)
-                        .content("""
+        mvc.perform(multipart(HttpMethod.PUT, "/api/products/{pno}", pno).file(productPart("""
                                 {"pname":"x","onSale":true,"stock":1,"version":99}
-                                """))
+                                """)))
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.code").value("PRODUCT_CONFLICT"));
     }

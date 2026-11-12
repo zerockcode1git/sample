@@ -7,9 +7,11 @@ import org.springdoc.core.models.GroupedOpenApi;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
+import java.util.Set;
+
 /**
  * Swagger UI: http://localhost:8080/swagger-ui.html
- * 현재는 상품 등록(POST /api/products)만 문서에 노출합니다.
+ * 현재는 상품 등록, 조회(목록/단건), 수정, 삭제를 문서에 노출합니다.
  */
 @Configuration
 public class OpenApiConfig {
@@ -19,18 +21,20 @@ public class OpenApiConfig {
         return new OpenAPI().info(new Info()
                 .title("Sample API")
                 .version("v1")
-                .description("상품 등록 API 문서. 이미지는 Supabase Storage(Public 버킷 `images`)에 저장됩니다."));
+                .description("상품 등록/조회/수정/삭제 API 문서. 이미지는 Supabase Storage(Public 버킷 `images`)에 저장됩니다."));
     }
 
-    // 문서에 넣을 API만 고릅니다. 다른 API를 문서화할 때 여기 조건을 늘립니다.
+    // 문서에 넣을 ProductController 메서드. 다른 API를 문서화할 때 여기에 추가합니다.
+    private static final Set<String> DOCUMENTED_METHODS = Set.of("register", "get", "list", "modify", "remove");
+
     @Bean
-    public GroupedOpenApi productRegisterApi() {
+    public GroupedOpenApi productApi() {
         return GroupedOpenApi.builder()
-                .group("product-register")
-                .displayName("상품 등록")
-                .pathsToMatch("/api/products")
+                .group("product")
+                .displayName("상품 (등록/조회/수정/삭제)")
+                .pathsToMatch("/api/products", "/api/products/*")
                 .addOpenApiMethodFilter(method ->
-                        method.getDeclaringClass() == ProductController.class && method.getName().equals("register"))
+                        method.getDeclaringClass() == ProductController.class && DOCUMENTED_METHODS.contains(method.getName()))
                 .build();
     }
 }

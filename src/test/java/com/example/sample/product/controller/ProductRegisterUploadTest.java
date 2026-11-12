@@ -2,6 +2,7 @@ package com.example.sample.product.controller;
 
 import com.example.sample.common.storage.FileStorageService;
 import com.example.sample.common.storage.SupabaseStorageProperties;
+import com.example.sample.common.storage.ThumbnailGenerator;
 import com.example.sample.product.entity.ProductEntity;
 import com.example.sample.product.repository.ProductRepository;
 import org.junit.jupiter.api.AfterEach;
@@ -70,7 +71,10 @@ class ProductRegisterUploadTest {
         for (Long pno : createdProducts) {
             productRepository.findById(pno).ifPresent(p -> {
                 Stream.of(p.getUpload1(), p.getUpload2(), p.getUpload3()).filter(StringUtils::hasText)
-                        .forEach(id -> fileStorageService.delete("products", id));
+                        .forEach(id -> {
+                            fileStorageService.delete("products", id);
+                            fileStorageService.delete("products/thumbs", ThumbnailGenerator.thumbnailId(id));
+                        });
                 productRepository.delete(p);
             });
         }
@@ -106,6 +110,14 @@ class ProductRegisterUploadTest {
         var downloaded = RestClient.create().get().uri(URI.create(fileStorageService.getUrl("products", saved.getUpload1())))
                 .retrieve().toEntity(byte[].class);
         assertThat(downloaded.getBody()).isNotEmpty();
+
+        // 썸네일도 함께 업로드: products/thumbs/{uuid}.jpg, 300px 이하 JPEG
+        var thumb = RestClient.create().get()
+                .uri(URI.create(fileStorageService.getUrl("products/thumbs", ThumbnailGenerator.thumbnailId(saved.getUpload1()))))
+                .retrieve().toEntity(byte[].class);
+        assertThat(thumb.getHeaders().getContentType()).isEqualTo(MediaType.IMAGE_JPEG);
+        var thumbImage = javax.imageio.ImageIO.read(new java.io.ByteArrayInputStream(thumb.getBody()));
+        assertThat(Math.max(thumbImage.getWidth(), thumbImage.getHeight())).isEqualTo(ThumbnailGenerator.MAX_SIZE);
         assertThat(downloaded.getHeaders().getContentType()).isEqualTo(MediaType.IMAGE_PNG);
         System.out.println("[register] pno=" + pno + ", img1=" + saved.getImg1() + ", upload1=" + fileStorageService.getUrl("products", saved.getUpload1()));
     }
@@ -133,6 +145,12 @@ class ProductRegisterUploadTest {
         // 3MB 이상
         mvc.perform(multipart("/api/products").file(productPart(PRODUCT_JSON.formatted("큰파일")))
                         .file(new MockMultipartFile("images", "big.png", "image/png", new byte[3 * 1024 * 1024])))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("INVALID_FILE"));
+
+        // 확장자와 형식은 이미지지만 내용이 이미지가 아님 (썸네일 생성 시 디코딩 실패)
+        mvc.perform(multipart("/api/products").file(productPart(PRODUCT_JSON.formatted("가짜이미지")))
+                        .file(new MockMultipartFile("images", "fake.png", "image/png", "not an image".getBytes())))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.code").value("INVALID_FILE"));
 

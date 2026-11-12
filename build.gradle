@@ -21,6 +21,9 @@ dependencies {
 	implementation 'org.springframework.boot:spring-boot-starter-data-jpa'
 	implementation 'org.springframework.boot:spring-boot-starter-webmvc'
 	implementation 'org.springdoc:springdoc-openapi-starter-webmvc-ui:3.2.0'
+	// 썸네일 생성: ImageIO에 webp 읽기와 CMYK 등 JPEG 호환성 추가
+	runtimeOnly 'com.twelvemonkeys.imageio:imageio-webp:3.15.3'
+	runtimeOnly 'com.twelvemonkeys.imageio:imageio-jpeg:3.15.3'
 	compileOnly 'org.projectlombok:lombok'
 	implementation 'io.github.openfeign.querydsl:querydsl-jpa:7.7'
 	annotationProcessor 'io.github.openfeign.querydsl:querydsl-apt:7.7:jpa'

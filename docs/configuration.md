@@ -14,7 +14,7 @@
 | --- | --- | --- |
 | `spring.servlet.multipart.max-file-size` | `3MB` | 파일 1개 최대 크기 (버킷 제한과 동일). 3MB 미만 검사는 `ImageFileValidator`가 다시 함 |
 | `spring.servlet.multipart.max-request-size` | `10MB` | 요청 전체 크기 (이미지 3개 + 상품 정보) |
-| `springdoc.swagger-ui.path` | `/swagger-ui.html` | Swagger UI 주소. 문서에 넣을 API는 `common.config.OpenApiConfig`의 `GroupedOpenApi`에서 고름 |
+| `springdoc.swagger-ui.path` | `/swagger-ui.html` | Swagger UI 주소. 문서에 넣을 API는 `common.config.OpenApiConfig`의 `DOCUMENTED_METHODS`에서 고름 (현재 register, get, list, modify, remove) |
 | `springdoc.api-docs.path` | `/v3/api-docs` | OpenAPI JSON 주소 |
 
 ## 프로필 전환

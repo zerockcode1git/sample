@@ -45,6 +45,22 @@ public class SupabaseFileStorageService implements FileStorageService {
     }
 
     @Override
+    public void upload(byte[] data, String contentType, String directory, String fileId) {
+        String key = key(directory, fileId);
+        try {
+            supabaseStorageRestClient.post()
+                    .uri(objectUri(key))
+                    .contentType(MediaType.parseMediaType(contentType))
+                    .body(data)
+                    .retrieve()
+                    .toBodilessEntity();
+        } catch (RestClientException e) {
+            throw new StorageException("파일 업로드에 실패했습니다. 파일=" + key, e);
+        }
+        log.info("[storage] 업로드 {} ({}, {} bytes)", key, contentType, data.length);
+    }
+
+    @Override
     public void delete(String directory, String fileId) {
         String key = key(directory, fileId);
         try {

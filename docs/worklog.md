@@ -168,3 +168,43 @@
 - pno 200 이상 상품은 사용자가 직접 삭제 (pno 287 포함) → 이관 대상 없음
 - 전체 테스트 통과. `bootRun` 후 HTTP로 등록 확인: pno 449, img1=`앞면 사진(1).png`, upload1=`28d00fd0-....png`, img2=`Back.PNG`, upload2=`646de249-....png`(확장자 소문자), Public URL 200 `image/png`
 - pno 449는 확인용으로 남겨 둠
+
+## 2026-11-12 (상품 조회)
+
+- 단건 조회 `GET /api/products/{pno}`, 목록 조회 `GET /api/products?page&size&keyword`는 기존 구현 유지 (응답에 img=원본 이름, upload=Public URL)
+- Swagger: 그룹을 "상품 (등록/조회)"(`/v3/api-docs/product`)로 바꾸고 `register`, `get`, `list` 노출. 조회 API에 설명/파라미터/에러 예시, `PageResponse`에 `@Schema`
+- `ProductReadTest` 5건 추가 (Repository로 직접 저장 → Storage 호출 없음, 롤백). 전체 테스트 통과
+- 실행 확인: pno 449 조회 시 img1=`앞면 사진(1).png`, upload1=Public URL. 목록 page=1,size=2 → 전체 21건, 11페이지
+
+## 2026-11-12 (상품 삭제 + 이미지 삭제)
+
+- `ProductService.remove`: DB 삭제(flush)를 먼저 처리하고, 커밋 후(`afterCommit`)에만 upload1~3 이미지를 Storage에서 삭제. 롤백 시 이미지 유지, 이미지 삭제 실패는 로그만
+- Swagger: 삭제 API 문서 추가 (그룹 "상품 (등록/조회/삭제)")
+- `ProductDeleteTest` 4건 추가 (실제 DB + Storage). 전체 테스트 통과
+- 발견: Public URL은 삭제 직후에도 CDN 캐시로 잠시 200을 줄 수 있음 → 테스트는 인증 API(`/object/authenticated/...`)로 존재 여부 확인
+- 실행 중이던 앱 종료
+
+## 2026-11-12 (상품 수정 + 이미지 교체)
+
+- `PUT /api/products/{pno}`를 multipart로 변경 (`product` JSON + 새 `images` 0~3개)
+- `ProductUpdateRequest.keepImages` 추가: 유지할 기존 이미지(파일 ID 또는 URL). 생략=모두 유지, []=모두 삭제. 최종 = 유지(순서대로) + 새 이미지, 최대 3개
+- 처리: 검증(버전 포함, 업로드 전) → 새 이미지 업로드 → DB 수정 → 커밋 후 유지 안 한 기존 이미지 삭제. 롤백 시 새 이미지만 삭제
+- `ProductEntity.changeImages`, `getImages` 추가. Swagger에 수정 API 추가
+- `ProductModifyTest` 5건 추가, `ProductControllerTest` PUT을 multipart로 수정. 전체 테스트 통과
+- 실제 서버 확인: 임시 상품 648 등록(이미지 2) → PUT(1개 유지 + 1개 추가) 200, 제거된 이미지 Storage에서 삭제 확인 → 임시 상품 삭제. Storage에는 pno 449 이미지 2개만 남음
+
+## 2026-11-12 (curl 테스트 문서)
+
+- `docs/curl-test.md` 추가: 준비(테스트 PNG 생성) → 등록(이미지 有/無) → 조회(단건, 목록, 검색) → 수정(정보만, 일부 유지+추가, 전부 삭제) → 삭제 → 에러 12종 → 정리. 변수(`PNO`, `VERSION`)를 이어 받아 순서대로 실행
+- 문서의 bash 블록을 그대로 추출해 zsh로 실행 검증 (모든 응답이 문서 설명과 일치), 테스트 데이터 정리 완료
+- `README.md`, `api.md`에 링크 추가
+
+## 2026-11-12 (상품 목록: 20개 제한, 썸네일, 검색 인덱스 확인) — 진행 중 중지
+
+- 목록 `size` 최대 20 (초과 → 20, 1 미만 → 10), `page` 0/음수 → 1로 조정 (오류 대신)
+- 썸네일: Supabase 이미지 변환은 비활성(`FeatureNotEnabled`, 유료) → 업로드 시 서버에서 생성(`ThumbnailGenerator`, 최대 300px JPEG 0.85, 흰 배경), `products/thumbs/{uuid}.jpg`. 원본은 그대로 유지. TwelveMonkeys imageio-webp/jpeg 3.15.3 추가
+- 목록 응답을 `ProductListResponse`(첫 이미지 `thumbnail`, `imageCount`)로 변경. 등록/수정/삭제/롤백에서 원본과 썸네일 함께 처리. 디코딩 실패 파일은 400 `INVALID_FILE`
+- 테스트: `ThumbnailGeneratorTest` 6건, 목록 조정/썸네일 검증 추가, 실제 이미지 사용(`support.TestImages`). 전체 통과
+- pno 449 이미지 2개 썸네일 수동 생성 (2.2MB → 67KB)
+- 검색 인덱스 (20만 건 임시 테이블): 3글자 이상은 pname/pdesc trigram GIN BitmapOr 사용, **2글자는 trigram 불가로 Seq Scan**. 대안: PGroonga(설치 가능, 미설치)
+- 중지 시점: 새 코드로 앱 실행 후 HTTP 확인 전, 문서(`curl-test.md`, `api.md`, `product.md`) 미갱신, 커밋 안 함
