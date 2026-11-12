@@ -61,7 +61,8 @@ public class ProductController {
                     `multipart/form-data`로 상품 정보(`product`, JSON)와 이미지(`images`, 0~3개)를 함께 보냅니다.
 
                     - 이미지: jpg/jpeg/png/gif/webp, 각 **3MB 미만**, 최대 3개 (요청 전체 10MB 이하)
-                    - 이미지는 Supabase Storage `products/yyyy/MM/dd/{uuid}_{원본이름}.{ext}`에 저장되고, 응답의 img1~img3은 Public URL입니다.
+                    - 이미지는 Supabase Storage `products/{uuid}.{확장자}`에 저장됩니다.
+                    - 응답의 `img1~img3`은 **원본 파일 이름**, `upload1~upload3`은 **업로드된 파일 주소(Public URL)**입니다.
                     - 검증은 업로드 전에 모두 끝나므로, 잘못된 파일이 하나라도 있으면 아무것도 저장되지 않습니다.
                     - DB 저장이 실패하면 이미 올린 이미지는 삭제됩니다.
                     """,
@@ -96,7 +97,7 @@ public class ProductController {
     public ResponseEntity<ProductResponse> register(
             @Parameter(description = "상품 정보 (JSON)", required = true)
             @RequestPart("product") ProductCreateRequest request,
-            @Parameter(description = "상품 이미지 0~3개 (순서대로 img1~img3)",
+            @Parameter(description = "상품 이미지 0~3개 (순서대로 1~3번: img=원본 이름, upload=업로드 주소)",
                     array = @ArraySchema(schema = @Schema(type = "string", format = "binary"), maxItems = 3))
             @RequestPart(value = "images", required = false) List<MultipartFile> images) {
         return ResponseEntity.status(HttpStatus.CREATED).body(productService.register(request, images));

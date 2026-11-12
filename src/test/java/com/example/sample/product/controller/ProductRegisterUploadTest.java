@@ -23,8 +23,6 @@ import java.awt.image.BufferedImage;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.net.URI;
-import java.time.LocalDate;
-import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -48,6 +46,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @AutoConfigureMockMvc
 class ProductRegisterUploadTest {
 
+    private static final String UUID_PATTERN = "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}";
+
     private static final String PRODUCT_JSON = """
             {"pname":"%s","pdesc":"이미지 등록 테스트","price":15000,"onSale":true,"stock":3}
             """;
@@ -69,7 +69,8 @@ class ProductRegisterUploadTest {
     void cleanup() {
         for (Long pno : createdProducts) {
             productRepository.findById(pno).ifPresent(p -> {
-                Stream.of(p.getImg1(), p.getImg2(), p.getImg3()).filter(StringUtils::hasText).forEach(fileStorageService::delete);
+                Stream.of(p.getUpload1(), p.getUpload2(), p.getUpload3()).filter(StringUtils::hasText)
+                        .forEach(id -> fileStorageService.delete("products", id));
                 productRepository.delete(p);
             });
         }
@@ -79,28 +80,34 @@ class ProductRegisterUploadTest {
     void registerWithImages() throws Exception {
         MvcResult result = mvc.perform(multipart("/api/products")
                         .file(productPart(PRODUCT_JSON.formatted("이미지상품")))
-                        .file(image("front.png", 300))
+                        .file(image("앞면 사진(1).png", 300))
                         .file(image("back.PNG", 200)))
                 .andExpect(status().isCreated())
-                .andExpect(jsonPath("$.img1").value(org.hamcrest.Matchers.startsWith(properties.publicUrl("products/"))))
-                .andExpect(jsonPath("$.img2").isString())
+                .andExpect(jsonPath("$.img1").value("앞면 사진(1).png"))   // 원본 이름 그대로
+                .andExpect(jsonPath("$.img2").value("back.PNG"))
                 .andExpect(jsonPath("$.img3").isEmpty())
+                .andExpect(jsonPath("$.upload1").value(org.hamcrest.Matchers.matchesPattern(
+                        java.util.regex.Pattern.quote(properties.publicUrl("products/")) + UUID_PATTERN + "\\.png")))
+                .andExpect(jsonPath("$.upload2").isString())
+                .andExpect(jsonPath("$.upload3").isEmpty())
                 .andReturn();
         long pno = pno(result);
         createdProducts.add(pno);
 
-        // DB에는 URL이 아니라 저장 경로만 저장
+        // img: 원본 이름, upload: {uuid}.{소문자 확장자}
         ProductEntity saved = productRepository.findById(pno).orElseThrow();
-        String today = LocalDate.now().format(DateTimeFormatter.ofPattern("yyyy/MM/dd"));
-        assertThat(saved.getImg1()).matches("products/" + today + "/[0-9a-f-]{36}_front\\.png");
-        assertThat(saved.getImg2()).endsWith("_back.png"); // 확장자는 소문자로
+        assertThat(saved.getImg1()).isEqualTo("앞면 사진(1).png");
+        assertThat(saved.getUpload1()).matches(UUID_PATTERN + "\\.png");
+        assertThat(saved.getUpload2()).matches(UUID_PATTERN + "\\.png"); // back.PNG → .png
         assertThat(saved.getImg3()).isNull();
+        assertThat(saved.getUpload3()).isNull();
 
         // Public URL로 실제 조회 가능
-        byte[] downloaded = RestClient.create().get().uri(URI.create(fileStorageService.getUrl(saved.getImg1())))
-                .retrieve().body(byte[].class);
-        assertThat(downloaded).isNotEmpty();
-        System.out.println("[register] pno=" + pno + ", img1=" + fileStorageService.getUrl(saved.getImg1()));
+        var downloaded = RestClient.create().get().uri(URI.create(fileStorageService.getUrl("products", saved.getUpload1())))
+                .retrieve().toEntity(byte[].class);
+        assertThat(downloaded.getBody()).isNotEmpty();
+        assertThat(downloaded.getHeaders().getContentType()).isEqualTo(MediaType.IMAGE_PNG);
+        System.out.println("[register] pno=" + pno + ", img1=" + saved.getImg1() + ", upload1=" + fileStorageService.getUrl("products", saved.getUpload1()));
     }
 
     @Test
@@ -108,6 +115,7 @@ class ProductRegisterUploadTest {
         MvcResult result = mvc.perform(multipart("/api/products").file(productPart(PRODUCT_JSON.formatted("이미지없음"))))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.img1").isEmpty())
+                .andExpect(jsonPath("$.upload1").isEmpty())
                 .andReturn();
         createdProducts.add(pno(result));
     }
@@ -140,18 +148,18 @@ class ProductRegisterUploadTest {
     // 이미지 업로드 후 DB 저장이 실패하면(상품명 200자 초과) 올린 이미지를 삭제
     @Test
     void deleteUploadedImagesWhenSaveFails() throws Exception {
-        List<String> beforeFiles = todayFiles();
+        List<String> beforeFiles = productFiles();
 
         mvc.perform(multipart("/api/products")
                         .file(productPart(PRODUCT_JSON.formatted("가".repeat(201))))
                         .file(image("rollback.png", 100)))
                 .andExpect(status().isBadRequest());
 
-        assertThat(todayFiles()).isEqualTo(beforeFiles);
+        assertThat(productFiles()).isEqualTo(beforeFiles);
     }
 
-    private List<String> todayFiles() {
-        String prefix = "products/" + LocalDate.now().format(DateTimeFormatter.ofPattern("yyyy/MM/dd"));
+    private List<String> productFiles() {
+        String prefix = "products";
         List<Map<String, Object>> list = supabaseStorageRestClient.post()
                 .uri("/object/list/" + properties.bucket())
                 .contentType(MediaType.APPLICATION_JSON)

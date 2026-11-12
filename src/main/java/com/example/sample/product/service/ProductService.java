@@ -5,6 +5,7 @@ import com.example.sample.common.exception.InvalidInputException;
 import com.example.sample.common.storage.FileStorageService;
 import com.example.sample.common.storage.ImageFileValidator;
 import com.example.sample.product.dto.ProductCreateRequest;
+import com.example.sample.product.dto.ProductImage;
 import com.example.sample.product.dto.ProductResponse;
 import com.example.sample.product.dto.ProductSearchCondition;
 import com.example.sample.product.dto.ProductUpdateRequest;
@@ -56,7 +57,7 @@ public class ProductService {
      * 상품 등록 + 이미지 업로드.
      * <ol>
      *   <li>상품 정보와 모든 이미지를 먼저 검증 (하나라도 잘못되면 아무것도 올리지 않음)</li>
-     *   <li>이미지를 저장소에 올리고 저장 경로를 img1~img3에 넣어 DB에 저장</li>
+     *   <li>이미지를 저장소(products/{uuid}.{확장자})에 올리고 원본 이름은 img1~img3, 파일 ID({uuid}.{확장자})는 upload1~upload3에 넣어 DB에 저장</li>
      *   <li>트랜잭션이 커밋되지 않으면(DB 저장 실패, 업로드 도중 실패 등) 이미 올린 이미지를 삭제</li>
      * </ol>
      *
@@ -70,11 +71,14 @@ public class ProductService {
 
         List<String> uploaded = new ArrayList<>();
         deleteOnRollback(uploaded);
+        List<ProductImage> productImages = new ArrayList<>();
         for (MultipartFile file : files) {
-            uploaded.add(fileStorageService.upload(file, IMAGE_DIRECTORY));
+            String fileId = fileStorageService.upload(file, IMAGE_DIRECTORY);
+            uploaded.add(fileId);
+            productImages.add(new ProductImage(originalName(file), fileId));
         }
 
-        ProductEntity saved = productRepository.save(request.toEntity(uploaded));
+        ProductEntity saved = productRepository.save(request.toEntity(productImages));
         return toResponse(saved);
     }
 
@@ -147,7 +151,13 @@ public class ProductService {
     }
 
     private ProductResponse toResponse(ProductEntity product) {
-        return ProductResponse.from(product, fileStorageService::getUrl);
+        return ProductResponse.from(product, fileId -> fileStorageService.getUrl(IMAGE_DIRECTORY, fileId));
+    }
+
+    // 원본 파일 이름. 일부 브라우저가 붙이는 경로(C:\\...\\a.png)는 떼고, 컬럼 길이(500)에 맞춥니다.
+    private static String originalName(MultipartFile file) {
+        String name = StringUtils.getFilename(String.valueOf(file.getOriginalFilename()).replace('\\', '/'));
+        return name.length() > 500 ? name.substring(name.length() - 500) : name;
     }
 
     // 브라우저 폼에서 파일을 고르지 않으면 이름 없는 빈 파트가 오므로 제외합니다.
@@ -161,12 +171,12 @@ public class ProductService {
     }
 
     // 커밋되지 않고 끝나면 업로드한 파일을 지워 저장소에 고아 파일이 남지 않게 합니다.
-    private void deleteOnRollback(List<String> uploadedPaths) {
+    private void deleteOnRollback(List<String> uploadedFileIds) {
         TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
             @Override
             public void afterCompletion(int status) {
                 if (status != STATUS_COMMITTED) {
-                    uploadedPaths.forEach(fileStorageService::delete);
+                    uploadedFileIds.forEach(fileId -> fileStorageService.delete(IMAGE_DIRECTORY, fileId));
                 }
             }
         });

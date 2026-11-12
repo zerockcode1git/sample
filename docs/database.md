@@ -22,7 +22,8 @@
 | price | INT | NOT NULL | 상품 가격 |
 | on_sale | BOOLEAN | NOT NULL | 판매 여부 (수정 가능) |
 | stock | INT | NOT NULL | 재고 수량 (수정 가능) |
-| img1, img2, img3 | VARCHAR(500) | | 상품 이미지 |
+| img1, img2, img3 | VARCHAR(500) | | 원본 이미지 파일 이름 (사용자가 올린 이름 그대로) |
+| upload1, upload2, upload3 | VARCHAR(500) | | 업로드된 파일의 UUID만 저장. Storage 키는 `products/{uuid}`, 응답에서는 Public URL로 변환 |
 | version | BIGINT | NOT NULL, DEFAULT 0 | 낙관적 잠금 버전 (`@Version`) |
 | created_at | TIMESTAMP | NOT NULL | 작성일 (자동) |
 | updated_at | TIMESTAMP | NOT NULL | 수정일 (자동) |

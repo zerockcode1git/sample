@@ -143,3 +143,28 @@
 - 저장 파일명: `{uuid}_{원본이름}.{소문자 확장자}` (예: `front.PNG` → `{uuid}_front.png`)
 - Supabase 객체 키는 한글을 거부(`InvalidKey`, 직접 확인)하므로 원본 이름은 영문/숫자/`.`/`_`/`-`만 남기고 나머지는 `_`로 바꿈. 남는 게 없으면 `image`, 최대 100자, 경로(`C:\...`, `dir/`)는 제거
 - `StoredFileNameTest` 9건 추가, `ProductRegisterUploadTest` 경로 검증 수정. 전체 테스트 통과
+
+## 2026-11-12 (img / upload 컬럼 분리)
+
+- `img1~3`: 원본 이미지 파일 이름 (한글 그대로), `upload1~3`: 실제 업로드된 파일의 저장 경로 (응답은 Public URL)
+- `ProductEntity`에 `upload1~3` 추가 (`ddl-auto: update`로 컬럼 생성됨), `ProductImage(originalName, path)` DTO 추가
+- `ProductResponse`에 `upload1~3` 추가, Swagger 설명 갱신
+- `ProductRegisterUploadTest`: 한글 원본 이름(`앞면 사진(1).png`) 보존, 저장 키는 `{uuid}_1.png` 검증. 전체 테스트 통과
+- `database.md`, `api.md`, `product.md` 갱신
+- 미처리: 기존 1건(pno 287)은 `img1`에 업로드 경로가 들어 있음. DB 직접 수정이 권한 거부되어 이관 SQL만 안내 (원본 이름은 기록된 적 없음)
+
+## 2026-11-12 (upload1~3은 UUID만)
+
+- Storage 키를 `products/{uuid}`로 변경 (날짜 폴더, 원본 이름, 확장자 제거). 형식은 업로드 시 Content-Type으로 저장되어 Public URL 응답도 `image/png` 등으로 나옴
+- DB `upload1~3`에는 UUID만 저장, 응답은 Public URL. 원본 이름은 `img1~3`
+- `FileStorageService`: `upload(file, dir)` → UUID 반환, `delete(dir, id)`, `getUrl(dir, id)`로 변경
+- `{uuid}_{원본이름}` 규칙과 `StoredFileNameTest` 삭제 (원본 이름은 DB에만 보관)
+- 기존 데이터 이관 (직접 실행): pno 287 Storage `products/2026/11/12/3f83...png` → `products/3f83...` 이동, DB `upload1=3f83...`, `img1=3f83....png` (원본 이름은 기록된 적 없음). 남은 옛 경로 0건
+- 전체 테스트 통과
+
+## 2026-11-12 (upload1~3에 확장자 추가, 재테스트)
+
+- 파일 ID와 Storage 키를 `{uuid}.{소문자 확장자}`로 변경 (`upload1~3` = `{uuid}.png`, 키 = `products/{uuid}.png`)
+- pno 200 이상 상품은 사용자가 직접 삭제 (pno 287 포함) → 이관 대상 없음
+- 전체 테스트 통과. `bootRun` 후 HTTP로 등록 확인: pno 449, img1=`앞면 사진(1).png`, upload1=`28d00fd0-....png`, img2=`Back.PNG`, upload2=`646de249-....png`(확장자 소문자), Public URL 200 `image/png`
+- pno 449는 확인용으로 남겨 둠

@@ -34,11 +34,11 @@ product/
 이미지 처리는 `common.storage`의 `FileStorageService`(인터페이스) / `SupabaseFileStorageService`(구현)에 맡깁니다.
 
 1. 상품 정보와 모든 이미지를 먼저 검증 (`ImageFileValidator`: 이미지 형식, 확장자, 3MB 미만, 최대 3개). 하나라도 잘못되면 아무것도 올리지 않음
-2. 이미지를 `products/yyyy/MM/dd/{uuid}_{원본이름}.{ext}`로 업로드 (원본 이름은 영문/숫자/`.`/`_`/`-`만 남기고 나머지는 `_`, 남는 게 없으면 `image`, 최대 100자, 확장자 소문자. Supabase가 한글 키를 거부하기 때문), 저장 경로를 img1~img3에 넣어 DB 저장
+2. 이미지를 `products/{uuid}`로 업로드 (확장자 없음, 형식은 업로드 시 Content-Type으로 저장). 원본 파일 이름은 img1~img3, UUID는 upload1~upload3에 넣어 DB 저장
 3. 트랜잭션이 커밋되지 않으면(DB 저장 실패, 업로드 도중 실패) `afterCompletion`에서 올린 이미지를 삭제
 
-- DB에는 저장 경로만 저장하고, 응답할 때 `FileStorageService.getUrl`로 Public URL로 바꿉니다. 이미 `http(s)`로 시작하는 값은 그대로 둡니다.
-- 시드 데이터(`product1_1.jpg` 등)는 Storage에 실제 파일이 없어 URL은 만들어지지만 조회하면 404입니다.
+- `img1~3`: 원본 파일 이름 그대로 (한글 가능). `upload1~3`: UUID만 저장하고, 응답할 때 `FileStorageService.getUrl("products", uuid)`로 Public URL로 바꿉니다. 이미 `http(s)`로 시작하는 값은 그대로 둡니다.
+- 시드 데이터는 `img1`에 `product1_1.jpg` 같은 이름만 있고 `upload1~3`은 비어 있습니다.
 
 ## 검색 (`list`)
 

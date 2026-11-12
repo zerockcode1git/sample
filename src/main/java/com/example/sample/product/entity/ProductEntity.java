@@ -43,6 +43,7 @@ public class ProductEntity extends BaseEntity {
     @Column(nullable = false)
     private int stock;
 
+    // 원본 이미지 파일 이름 (사용자가 올린 이름 그대로, 예: "앞면 사진(1).jpg")
     @Column(length = 500)
     private String img1;
 
@@ -52,6 +53,16 @@ public class ProductEntity extends BaseEntity {
     @Column(length = 500)
     private String img3;
 
+    // 업로드된 파일 ID "{uuid}.{확장자}". Storage 키는 "products/{uuid}.{확장자}", 응답에서는 Public URL로 변환
+    @Column(length = 500)
+    private String upload1;
+
+    @Column(length = 500)
+    private String upload2;
+
+    @Column(length = 500)
+    private String upload3;
+
     // 낙관적 잠금용 버전. 기존 행은 default 0으로 채워집니다.
     @Version
     @Column(nullable = false, columnDefinition = "bigint default 0")
@@ -59,7 +70,8 @@ public class ProductEntity extends BaseEntity {
 
     @Builder
     private ProductEntity(String pname, String pdesc, int price, boolean onSale, int stock,
-                          String img1, String img2, String img3) {
+                          String img1, String img2, String img3,
+                          String upload1, String upload2, String upload3) {
         this.pname = pname;
         validateStock(stock);
         this.pdesc = pdesc;
@@ -69,6 +81,9 @@ public class ProductEntity extends BaseEntity {
         this.img1 = img1;
         this.img2 = img2;
         this.img3 = img3;
+        this.upload1 = upload1;
+        this.upload2 = upload2;
+        this.upload3 = upload3;
     }
 
     // 수정 가능 항목: 상품명, 판매여부, 재고수량

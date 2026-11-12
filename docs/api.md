@@ -33,7 +33,7 @@ curl -X POST http://localhost:8080/api/products \
   -F 'images=@front.png' -F 'images=@back.png'
 ```
 
-응답 201: 상품 객체. `img1~img3`은 Public URL (`{url}/storage/v1/object/public/images/products/yyyy/MM/dd/{uuid}_{원본이름}.png`), 없으면 null.
+응답 201: 상품 객체. `img1~img3`은 원본 파일 이름, `upload1~upload3`은 업로드된 파일 주소(Public URL, `{url}/storage/v1/object/public/images/products/{uuid}`). 없으면 null.
 
 에러
 
@@ -48,7 +48,8 @@ curl -X POST http://localhost:8080/api/products \
 
 ```json
 { "pno": 33, "pname": "기계식 키보드", "pdesc": "...", "price": 89000, "onSale": true, "stock": 4,
-  "img1": null, "img2": null, "img3": null, "version": 1,
+  "img1": null, "img2": null, "img3": null,
+  "upload1": null, "upload2": null, "upload3": null, "version": 1,
   "createdAt": "2026-11-10T10:00:00", "updatedAt": "2026-11-10T11:00:00" }
 ```
 
